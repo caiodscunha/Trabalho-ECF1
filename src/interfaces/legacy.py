@@ -1,0 +1,142 @@
+from datetime import datetime
+from typing import Any, Optional
+
+from src.models.order import Order
+from src.repositories.sqlite_order_repository import SqliteOrderRepository
+from src.services.inventory_service import (
+    InventoryService,
+    StaticInventoryProvider,
+)
+from src.services.notification_service import ConsoleNotifier, NotificationService
+from src.services.order_service import OrderService
+from src.services.payment_service import PaymentService
+from src.services.report_service import ReportService
+
+
+class Sis:
+    """Facade compatível com a API legada do sistema de pedidos."""
+
+    def __init__(self) -> None:
+        self._repository = SqliteOrderRepository("loja.db")
+        notifications = NotificationService(ConsoleNotifier())
+        self._order_service = OrderService(self._repository, notifications)
+        self._payment_service = PaymentService(self._repository, notifications)
+        self._inventory_service = InventoryService(StaticInventoryProvider())
+        self._report_service = ReportService(self._repository)
+
+    def add_ped(self, n: str, its: list[dict[str, Any]], t: str) -> int:
+        return self._order_service.create_order(n, its, t)
+
+    def get_ped(self, id: int) -> Optional[dict[str, Any]]:
+        order = self._repository.get_by_id(id)
+        if order is None:
+            return None
+        return _order_to_legacy_dict(order)
+
+    def upd_st(self, id: int, s: str) -> None:
+        self._order_service.update_status(id, s)
+
+    def calc_tot_cli(self, n: str) -> float:
+        return self._order_service.total_for_client(n)
+
+    def gerar_rel(self, tipo: str) -> None:
+        if tipo == "vendas":
+            self._report_service.sales_report()
+        elif tipo == "clientes":
+            self._report_service.clients_report()
+
+    def proc_pag(self, id: int, m: str, vl: float) -> bool:
+        return self._payment_service.process_payment(id, m, vl)
+
+    def validar_estoque(self, its: list[dict[str, Any]]) -> bool:
+        return self._inventory_service.validate(its)
+
+    def cancelar_pedido(self, id: int) -> None:
+        self._order_service.cancel_order(id)
+
+    def close(self) -> None:
+        self._repository.close()
+
+
+class PedEspecial(Sis):
+    """Subclasse legada com comportamento próprio para pedidos especiais.
+
+    Mantida intencionalmente como no original (incluindo o ``tot * 1.15``
+    dentro do loop e o ``upd_st`` que ignora transições). Sprint 2 vai
+    reavaliar essa hierarquia sob LSP.
+    """
+
+    def add_ped(self, n: str, its: list[dict[str, Any]], t: str) -> int:
+        tot: float = 0
+        for i in its:
+            if i["tipo"] == "normal":
+                tot += i["p"] * i["q"]
+            elif i["tipo"] == "desc10":
+                tot += i["p"] * i["q"] * 0.9
+            elif i["tipo"] == "desc20":
+                tot += i["p"] * i["q"] * 0.8
+            tot = tot * 1.15
+        order = Order(
+            cliente=n,
+            itens=its,
+            total=tot,
+            status="pendente",
+            data=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            tipo_cliente=t,
+        )
+        order_id = self._repository.add(order)
+        print(f"Email especial enviado para {n}: Pedido especial recebido!")
+        return order_id
+
+    def upd_st(self, id: int, s: str) -> None:
+        order = self._repository.get_by_id(id)
+        if order is None:
+            return
+        self._repository.update_status(id, s)
+        print(f"Pedido especial {id} -> {s}")
+
+
+def _order_to_legacy_dict(order: Order) -> dict[str, Any]:
+    """Traduz Order (modelo limpo) para o dict que os testes legados esperam."""
+    return {
+        "id": order.id,
+        "cli": order.cliente,
+        "itens": order.itens,
+        "tot": order.total,
+        "st": order.status,
+        "dt": order.data,
+        "tp": order.tipo_cliente,
+    }
+
+
+def main() -> None:
+    s = Sis()
+    its1 = [
+        {"nome": "produto1", "p": 100, "q": 2, "tipo": "normal"},
+        {"nome": "produto2", "p": 50, "q": 1, "tipo": "desc10"},
+    ]
+    if s.validar_estoque(its1):
+        id1 = s.add_ped("Joao Silva", its1, "normal")
+        print(f"Pedido {id1} criado!")
+        s.proc_pag(id1, "cartao", 250)
+        s.upd_st(id1, "enviado")
+        s.upd_st(id1, "entregue")
+
+    its2 = [{"nome": "produto3", "p": 200, "q": 1, "tipo": "desc20"}]
+    if s.validar_estoque(its2):
+        id2 = s.add_ped("Maria Santos", its2, "vip")
+        s.proc_pag(id2, "pix", 160)
+
+    its3 = [{"nome": "produto1", "p": 100, "q": 5, "tipo": "normal"}]
+    if s.validar_estoque(its3):
+        id3 = s.add_ped("Empresa XYZ", its3, "corporativo")
+        s.proc_pag(id3, "boleto", 500)
+
+    s.gerar_rel("vendas")
+    print()
+    s.gerar_rel("clientes")
+    s.close()
+
+
+if __name__ == "__main__":
+    main()
