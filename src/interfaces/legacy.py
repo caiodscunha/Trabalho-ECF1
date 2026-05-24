@@ -1,6 +1,6 @@
-from datetime import datetime
 from typing import Any, Optional
 
+from src.factories.order_factory import SpecialOrderFactory, StandardOrderFactory
 from src.models.order import Order
 from src.repositories.sqlite_order_repository import SqliteOrderRepository
 from src.services.inventory_service import (
@@ -20,12 +20,13 @@ class Sis:
         self._repository = SqliteOrderRepository("loja.db")
         notifications = NotificationService(ConsoleNotifier())
         self._order_service = OrderService(self._repository, notifications)
+        self._factory = StandardOrderFactory(self._order_service)
         self._payment_service = PaymentService(self._repository, notifications)
         self._inventory_service = InventoryService(StaticInventoryProvider())
         self._report_service = ReportService(self._repository)
 
     def add_ped(self, n: str, its: list[dict[str, Any]], t: str) -> int:
-        return self._order_service.create_order(n, its, t)
+        return self._factory.create(n, its, t)
 
     def get_ped(self, id: int) -> Optional[dict[str, Any]]:
         order = self._repository.get_by_id(id)
@@ -58,35 +59,26 @@ class Sis:
         self._repository.close()
 
 
-class PedEspecial(Sis):
-    """Subclasse legada com comportamento próprio para pedidos especiais.
+class PedEspecial:
+    """Fachada legada para pedidos especiais via composição (não herança).
 
-    Mantida intencionalmente como no original (incluindo o ``tot * 1.15``
-    dentro do loop e o ``upd_st`` que ignora transições). Sprint 2 vai
-    reavaliar essa hierarquia sob LSP.
+    LSP: remove a violação onde PedEspecial estendia Sis e sobrescrevia métodos
+    quebrando contratos (upd_st ignorava notificações, add_ped aplicava taxa
+    dentro do loop acumulativo). Agora usa SpecialOrderFactory por composição.
     """
 
+    def __init__(self) -> None:
+        self._repository = SqliteOrderRepository("loja.db")
+        self._factory = SpecialOrderFactory(self._repository)
+
     def add_ped(self, n: str, its: list[dict[str, Any]], t: str) -> int:
-        tot: float = 0
-        for i in its:
-            if i["tipo"] == "normal":
-                tot += i["p"] * i["q"]
-            elif i["tipo"] == "desc10":
-                tot += i["p"] * i["q"] * 0.9
-            elif i["tipo"] == "desc20":
-                tot += i["p"] * i["q"] * 0.8
-            tot = tot * 1.15
-        order = Order(
-            cliente=n,
-            itens=its,
-            total=tot,
-            status="pendente",
-            data=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            tipo_cliente=t,
-        )
-        order_id = self._repository.add(order)
-        print(f"Email especial enviado para {n}: Pedido especial recebido!")
-        return order_id
+        return self._factory.create(n, its, t)
+
+    def get_ped(self, id: int) -> Optional[dict[str, Any]]:
+        order = self._repository.get_by_id(id)
+        if order is None:
+            return None
+        return _order_to_legacy_dict(order)
 
     def upd_st(self, id: int, s: str) -> None:
         order = self._repository.get_by_id(id)
@@ -95,9 +87,11 @@ class PedEspecial(Sis):
         self._repository.update_status(id, s)
         print(f"Pedido especial {id} -> {s}")
 
+    def close(self) -> None:
+        self._repository.close()
+
 
 def _order_to_legacy_dict(order: Order) -> dict[str, Any]:
-    """Traduz Order (modelo limpo) para o dict que os testes legados esperam."""
     return {
         "id": order.id,
         "cli": order.cliente,
