@@ -1,12 +1,9 @@
 from src.interfaces.notifier import INotifier
+from src.interfaces.order_event_observer import IOrderEventObserver
 
 
 class ConsoleNotifier(INotifier):
-    """Notifier concreto que escreve no console.
-
-    Preserva o comportamento do legado (todos os "envios" são prints), mas
-    isolado atrás da ABC INotifier para troca futura sem mexer em regras.
-    """
+    """Notifier concreto que escreve no console."""
 
     def send_email(self, recipient: str, message: str) -> None:
         print(f"Email enviado para {recipient}: {message}")
@@ -19,43 +16,33 @@ class ConsoleNotifier(INotifier):
 
 
 class NotificationService:
-    """Coordena que notificações disparar para cada evento e tipo de cliente.
+    """Subject do padrão Observer para eventos de pedido (Observer GoF).
 
-    SRP: única responsabilidade é decidir e disparar notificações.
-    Não conhece persistência nem cálculos de pedido.
+    Mantém lista de IOrderEventObserver e os notifica a cada evento.
+    OCP: adicionar canal (WhatsApp, push) = criar novo observer e registrá-lo
+    via subscribe() — NotificationService nunca precisa ser modificado.
     """
 
-    def __init__(self, notifier: INotifier) -> None:
-        self._notifier = notifier
+    def __init__(self) -> None:
+        self._observers: list[IOrderEventObserver] = []
+
+    def subscribe(self, observer: IOrderEventObserver) -> None:
+        self._observers.append(observer)
 
     def notify_order_received(self, client: str, client_type: str) -> None:
-        if client_type == "normal":
-            self._notifier.send_email(client, "Pedido recebido!")
-        elif client_type == "vip":
-            self._notifier.send_email(client, "Pedido recebido!")
-            self._notifier.send_sms(client, "Pedido VIP recebido!")
-        elif client_type == "corporativo":
-            self._notifier.send_email(client, "Pedido recebido!")
-            self._notifier.notify_account_manager(client)
+        for obs in self._observers:
+            obs.on_order_received(client, client_type)
 
     def notify_order_approved(self, client: str, client_type: str) -> None:
-        self._notifier.send_email(client, "Pedido aprovado!")
-        if client_type == "vip":
-            self._notifier.send_sms(client, "Pedido aprovado!")
+        for obs in self._observers:
+            obs.on_order_approved(client, client_type)
 
     def notify_order_sent(self, client: str) -> None:
-        self._notifier.send_email(client, "Pedido enviado!")
+        for obs in self._observers:
+            obs.on_order_sent(client)
 
     def notify_order_delivered(
         self, client: str, client_type: str, total: float
     ) -> None:
-        self._notifier.send_email(client, "Pedido entregue!")
-        if client_type == "vip":
-            points = int(total * 2)
-            print(f"Cliente VIP ganhou {points} pontos!")
-        elif client_type == "corporativo":
-            points = int(total * 1.5)
-            print(f"Cliente corporativo ganhou {points} pontos!")
-        else:
-            points = int(total)
-            print(f"Cliente ganhou {points} pontos!")
+        for obs in self._observers:
+            obs.on_order_delivered(client, client_type, total)
