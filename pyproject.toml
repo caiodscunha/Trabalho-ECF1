@@ -25,7 +25,7 @@ python_files = "test_*.py"
 addopts = "-v"
 
 [tool.coverage.run]
-source = ["legacy.py"]
+source = ["legacy.py", "src"]
 omit = ["*/tests/*"]
 
 [tool.coverage.report]

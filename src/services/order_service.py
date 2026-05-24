@@ -1,34 +1,37 @@
 from datetime import datetime
 from typing import Any, Optional
 
+from src.interfaces.discount_strategy import IClientDiscountStrategy, IItemPriceCalculator
 from src.interfaces.order_repository import IOrderRepository
 from src.models.order import Order
 from src.services.notification_service import NotificationService
+from src.strategies.discount_strategy import (
+    DefaultItemPriceCalculator,
+    NoClientDiscount,
+    _DEFAULT_CLIENT_DISCOUNTS,
+)
 
 
 class OrderService:
-    """Orquestra o ciclo de vida do pedido: criação, transição de status,
-    cancelamento e consultas agregadas por cliente.
+    """Orquestra o ciclo de vida do pedido.
 
-    SRP: regra de negócio do pedido. Persistência fica no repository e
-    notificação fica no NotificationService — ambos injetados.
-
-    As cadeias de if/elif por tipo de cliente/item permanecem aqui em
-    Sprint 1; serão substituídas por Strategy em Sprint 2 (OCP).
+    OCP: IItemPriceCalculator é injetável — decorar com novas regras de
+    desconto (ex: volume) sem modificar esta classe.
+    DIP: depende apenas de abstrações (IOrderRepository, IItemPriceCalculator,
+    IClientDiscountStrategy).
     """
-
-    _DISCOUNT_BY_CLIENT_TYPE = {
-        "vip": 0.95,
-        "corporativo": 0.90,
-    }
 
     def __init__(
         self,
         repository: IOrderRepository,
         notification_service: NotificationService,
+        item_calculator: Optional[IItemPriceCalculator] = None,
+        client_discounts: Optional[dict[str, IClientDiscountStrategy]] = None,
     ) -> None:
         self._repository = repository
         self._notifications = notification_service
+        self._item_calculator = item_calculator or DefaultItemPriceCalculator()
+        self._client_discounts = client_discounts if client_discounts is not None else _DEFAULT_CLIENT_DISCOUNTS
 
     def create_order(
         self, client: str, items: list[dict[str, Any]], client_type: str
@@ -66,22 +69,9 @@ class OrderService:
     def _calculate_total(
         self, items: list[dict[str, Any]], client_type: str
     ) -> float:
-        total = 0.0
-        for item in items:
-            total += self._apply_item_discount(item)
-        return total * self._DISCOUNT_BY_CLIENT_TYPE.get(client_type, 1.0)
-
-    @staticmethod
-    def _apply_item_discount(item: dict[str, Any]) -> float:
-        base = item["p"] * item["q"]
-        tipo = item["tipo"]
-        if tipo == "normal" or tipo == "frete_gratis":
-            return base
-        if tipo == "desc10":
-            return base * 0.9
-        if tipo == "desc20":
-            return base * 0.8
-        return 0.0
+        subtotal = sum(self._item_calculator.calculate(item) for item in items)
+        discount = self._client_discounts.get(client_type, NoClientDiscount())
+        return discount.apply(subtotal)
 
     def _notify_status_change(self, order: Order, new_status: str) -> None:
         if new_status == "aprovado":
