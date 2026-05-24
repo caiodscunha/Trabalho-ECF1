@@ -7,6 +7,12 @@ from src.services.inventory_service import (
     InventoryService,
     StaticInventoryProvider,
 )
+from src.observers.notification_observer import (
+    AccountManagerOrderObserver,
+    EmailOrderObserver,
+    PointsOrderObserver,
+    SmsOrderObserver,
+)
 from src.services.notification_service import ConsoleNotifier, NotificationService
 from src.services.order_service import OrderService
 from src.services.payment_service import PaymentService
@@ -18,7 +24,12 @@ class Sis:
 
     def __init__(self) -> None:
         self._repository = SqliteOrderRepository("loja.db")
-        notifications = NotificationService(ConsoleNotifier())
+        notifier = ConsoleNotifier()
+        notifications = NotificationService()
+        notifications.subscribe(EmailOrderObserver(notifier))
+        notifications.subscribe(SmsOrderObserver(notifier))
+        notifications.subscribe(AccountManagerOrderObserver(notifier))
+        notifications.subscribe(PointsOrderObserver())
         self._order_service = OrderService(self._repository, notifications)
         self._payment_service = PaymentService(self._repository, notifications)
         self._inventory_service = InventoryService(StaticInventoryProvider())
