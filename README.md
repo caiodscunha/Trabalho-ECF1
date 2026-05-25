@@ -1,169 +1,143 @@
-# Loja Verde - Refatoração Guiada por SOLID, Clean Code e Padrões GoF
+# Loja Verde — Refatoração Guiada por SOLID, Clean Code e Padrões GoF
+
+**Disciplina:** Padrões e Arquitetura de Software — PUC-Campinas — 1º Semestre 2026
+
+**Professor:** Prof. Dr. Douglas H. S. Abreu
+
+---
 
 ## Descrição
 
-Este projeto é a refatoração de um sistema legado de e-commerce seguindo os cinco princípios SOLID, práticas de Clean Code, e aplicação de pelo menos quatro padrões de design do Gang of Four (GoF).
+Refatoração de um sistema legado de e-commerce (Loja Verde) aplicando os cinco princípios SOLID, práticas de Clean Code e cinco padrões GoF: Strategy, Repository, Observer, Factory Method e Decorator.
 
-## Sprint 0: Estabelecer Rede de Segurança ✓
+O sistema legado consistia em uma única classe Sis com acumulando conexão SQLite, cálculo de preços, persistência, notificações, pagamentos e relatórios, além de uma subclasse PedEspecial que violava o LSP. Após a refatoração, o sistema mantém compatibilidade total com a API legada via facade, com 63 testes passando e 95% de cobertura.
 
-### Entregas Realizadas
+---
 
-- ✅ **Suíte de Testes Golden Master**: 47 testes cobrindo todos os fluxos obrigatórios
-  - Criação de pedido normal, VIP e corporativo
-  - Processamento de pagamento (cartão, PIX, boleto)
-  - Atualização de status
-  - Cancelamento e geração de relatórios
+## Métricas
 
-- ✅ **Cobertura de Testes**: 88% (exceeds 80% requirement)
-  - Coverage report gerado por `pytest-cov`
-  - Linhas não cobertas são funções auxiliares de teste
+| Métrica | Ferramenta | Critério | Resultado |
+|---|---|---|---|
+| Testes passando | pytest | 100% | 63/63 |
+| Cobertura | coverage.py | >= 85% | 95% |
+| Lint / PEP 8 | ruff | 0 erros | 0 erros |
+| Tipagem estática | mypy --strict | 0 erros | 0 erros em 31 arquivos |
+| Complexidade média | radon cc | média A ou B | A (1.55) |
 
-- ✅ **Análise Textual SOLID**: Identificadas violações em cada princípio
-  - **SRP**: Múltiplas responsabilidades em uma classe
-  - **OCP**: Novos métodos de pagamento/desconto requerem modificação
-  - **LSP**: PedEspecial viola contrato do pai
-  - **ISP**: Interface monolítica Sis
-  - **DIP**: Dependência em SQLite e print() concretos
+---
 
-### Estrutura do Projeto
+## Estrutura do Projeto
 
 ```
 Trabalho-ECF1/
+├── legacy.py                        # Redirect para src/facades/legacy.py (API legada)
 ├── src/
-│   └── legacy.py              # Código legado funcional
+│   ├── facades/
+│   │   └── legacy.py                # Sis e PedEspecial refatoradas (Facade)
+│   ├── factories/
+│   │   └── order_factory.py         # StandardOrderFactory, SpecialOrderFactory
+│   ├── interfaces/                  # 8 ABCs: IOrderRepository, IPaymentStrategy, etc.
+│   ├── models/
+│   │   └── order.py                 # Dataclass Order
+│   ├── observers/
+│   │   ├── notification_observer.py # Email, SMS, AccountManager, Points observers
+│   │   └── whatsapp_observer.py     # Extensão: WhatsApp observer
+│   ├── repositories/
+│   │   └── sqlite_order_repository.py
+│   ├── services/
+│   │   ├── order_service.py
+│   │   ├── payment_service.py
+│   │   ├── notification_service.py
+│   │   ├── inventory_service.py
+│   │   └── report_service.py
+│   ├── strategies/
+│   │   ├── payment_strategy.py      # Cartao, Pix, Boleto
+│   │   ├── discount_strategy.py     # DefaultItemPriceCalculator, descontos por cliente
+│   │   ├── crypto_payment_strategy.py  # Extensão: Crypto (taxa 2%)
+│   │   └── volume_discount_strategy.py # Extensão: Decorator de desconto por volume
+│   └── main.py                      # Ponto de entrada (py -3.13 -m src.main)
 ├── tests/
-│   └── golden_master/
-│       └── test_legacy_behavior.py    # 47 testes de caracterização
+│   ├── golden_master/
+│   │   └── test_legacy_behavior.py  # 48 testes de caracterização
+│   └── unit/
+│       ├── test_crypto_payment.py
+│       ├── test_volume_discount.py
+│       └── test_whatsapp_notification.py
 ├── docs/
-│   └── analise_sprint0.md     # Análise textual SOLID (2 pág)
-├── .gitignore
+│   ├── analise.docx                 # Documento de análise completo (seções 1-9)
+│   ├── analise_sprint0.docx         # Análise Sprint 0
+│   ├── diagrama.puml                # Diagrama UML completo (PlantUML)
+│   ├── diagramas/                   # Diagramas parciais por padrão GoF (.puml)
+│   ├── imagens/                     # PNGs gerados dos diagramas GoF
+│   └── gerar_analise.py             # Script que gera o analise.docx
 ├── pyproject.toml
 ├── Makefile
 └── README.md
 ```
 
+---
+
+## Padrões GoF Aplicados
+
+| Padrão | Onde |
+|---|---|
+| **Strategy** | `IPaymentStrategy` + CartaoStrategy, PixStrategy, BoletoStrategy, CryptoPaymentStrategy; `IItemPriceCalculator` + DefaultItemPriceCalculator; `IClientDiscountStrategy` + VipClientDiscount, CorporativoClientDiscount |
+| **Repository** | `IOrderRepository` + SqliteOrderRepository |
+| **Observer** | `IOrderEventObserver` + Email, SMS, AccountManager, Points, WhatsApp observers; NotificationService como publisher |
+| **Factory Method** | `IOrderFactory` + StandardOrderFactory, SpecialOrderFactory |
+| **Decorator** | VolumeDiscountCalculator envolve qualquer IItemPriceCalculator |
+
+---
+
+## Extensões Obrigatórias
+
+Todas implementadas sem modificar nenhuma classe existente:
+
+- **Criptomoeda** — `src/strategies/crypto_payment_strategy.py` (taxa de 2%)
+- **WhatsApp** — `src/observers/whatsapp_observer.py` (todos os tipos de cliente)
+- **Desconto por volume** — `src/strategies/volume_discount_strategy.py` (15% off para 3+ unidades, padrão Decorator)
+
+---
+
 ## Como Executar
 
-### Pré-requisitos
+```bash
+# Pré-requisito: Python 3.13
 
-- Python 3.13+
-- pip
+# Instalar dependências
+py -3.13 -m pip install pytest pytest-cov ruff mypy radon python-docx plantuml
 
-### Instalação
+# Executar o sistema
+py -3.13 -m src.main
+
+# Testes
+py -3.13 -m pytest --tb=no -q
+
+# Testes com cobertura
+py -3.13 -m pytest --cov=src --cov-report=term-missing
+
+# Lint
+py -3.13 -m ruff check src/
+
+# Tipagem
+py -3.13 -m mypy --strict --explicit-package-bases src/
+
+# Complexidade
+py -3.13 -m radon cc src/ -a -s
+
+# Ou tudo via Makefile
+make all
+```
 
 ```bash
-# Instalar dependências de desenvolvimento
-py -3.13 -m pip install pytest pytest-cov
+# Gerar imagens dos diagramas GoF
+py -3.13 docs/diagramas/gerar_imagens.py
 
-# Ou usar o Makefile (requer make/mingw)
-make install
+# Gerar documento de análise Word
+py -3.13 docs/gerar_analise.py
 ```
 
-### Executar Testes
-
-```bash
-# Todos os testes com cobertura
-py -3.13 -m pytest tests/ -v --cov=src --cov-report=term-missing
-
-# Apenas testes Golden Master
-py -3.13 -m pytest tests/golden_master/ -v
-
-# Com HTML report
-py -3.13 -m pytest tests/ --cov=src --cov-report=html
-```
-
-### Usar Makefile
-
-```bash
-make test       # Executar testes
-make cov        # Cobertura com HTML
-make lint       # Lint com ruff
-make type       # Type checking com mypy
-make complexity # Análise de complexidade
-make all        # Todos os checks acima
-make clean      # Limpar arquivos gerados
-```
-
-## Violações SOLID Identificadas
-
-### Single Responsibility Principle (SRP)
-
-**Problema**: Classe `Sis` com 5+ responsabilidades diferentes
-- Cálculo de totais com regras de negócio
-- Persistência em banco de dados SQLite
-- Notificação de clientes
-- Processamento de pagamentos
-- Geração de relatórios
-
-**Impacto**: Mudanças simples afetam múltiplas partes. Impossível testar sem banco de dados.
-
 ---
-
-### Open/Closed Principle (OCP)
-
-**Problema**: Novos métodos de pagamento/descontos requerem modificação de código existente
-
-```python
-def proc_pag(self, id, m, vl):
-    if m == 'cartao': ...
-    elif m == 'pix': ...
-    elif m == 'boleto': ...
-    else: return False  # Requer if/elif aqui para novo método!
-```
-
-**Impacto**: Não é possível adicionar "Pagamento em criptomoeda" sem editar `Sis`.
-
----
-
-### Liskov Substitution Principle (LSP)
-
-**Problema**: `PedEspecial` viola contrato do pai `Sis`
-- `add_ped` não aplica desconto de tipo de cliente
-- `upd_st` ignora transições de estado
-
-**Impacto**: Código polimórfico quebra. `PedEspecial` não pode substituir `Sis` de forma segura.
-
----
-
-### Interface Segregation Principle (ISP)
-
-**Problema**: Interface monolítica `Sis` força clientes a depender de tudo
-
-Clientes que querem apenas calcular total precisam:
-- SQLite connection
-- Cursor database
-- Todos os métodos de notificação
-- Geração de relatórios
-
-**Impacto**: Testes dependem de banco de dados real. Mock de toda classe necessário.
-
----
-
-### Dependency Inversion Principle (DIP)
-
-**Problema**: Dependências em implementações concretas
-
-```python
-def __init__(self):
-    self.db = sqlite3.connect('loja.db')  # Dependência em sqlite3!
-
-def add_ped(self, n, its, t):
-    if t == 'normal':
-        print(...)  # Dependência em print()!
-```
-
-**Impacto**: Trocar SQLite por PostgreSQL = reescrita total. Impossível usar notificação real.
-
----
-
-## Próximas Etapas (Sprint 1 e 2)
-
-- [ ] Sprint 1: Refatoração em camadas (Models, Repositories, Services)
-- [ ] Sprint 1: Padrão Repository para persistência
-- [ ] Sprint 2: Padrão Strategy para pagamentos e descontos
-- [ ] Sprint 2: Padrão Observer para notificações
-- [ ] Sprint 2: Padrão Factory para criação de pedidos
-- [ ] Extensões: Criptomoeda, WhatsApp, Desconto por volume
 
 ## Referências
 
@@ -174,5 +148,5 @@ def add_ped(self, n, its, t):
 
 ---
 
-**Status**: Sprint 0 - Concluído ✓
-**Data**: Maio de 2026
+**Status:** Sprint 2 — Concluído
+**Data:** Maio de 2026
