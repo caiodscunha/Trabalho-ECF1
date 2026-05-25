@@ -1,0 +1,316 @@
+@startuml Loja Verde — Arquitetura Final
+
+skinparam classAttributeIconSize 0
+skinparam classFontStyle bold
+skinparam packageBackgroundColor #F8F8F8
+skinparam packageBorderColor #AAAAAA
+skinparam linetype ortho
+hide empty members
+
+' ===== MODELS =====
+package "models" #E8F4E8 {
+    class Order <<dataclass>> {
+        +id: Optional[int]
+        +cliente: str
+        +itens: list[dict]
+        +total: float
+        +status: str
+        +data: str
+        +tipo_cliente: str
+    }
+}
+
+' ===== INTERFACES =====
+package "interfaces" #E8E8F8 {
+    interface IOrderRepository {
+        +add(order: Order): int
+        +get_by_id(id: int): Optional[Order]
+        +update_status(id: int, status: str): None
+        +list_all(): list[Order]
+        +list_distinct_clients(): list[tuple]
+        +sum_total_by_client(client: str): float
+        +close(): None
+    }
+
+    interface IItemPriceCalculator {
+        +calculate(item: dict): float
+    }
+
+    interface IClientDiscountStrategy {
+        +apply(total: float): float
+    }
+
+    interface IPaymentStrategy {
+        +required_amount(order_total: float): float
+        +process(): bool
+        +auto_approves: bool
+    }
+
+    interface IOrderFactory {
+        +create(client: str, items: list, client_type: str): int
+    }
+
+    interface IOrderEventObserver {
+        +on_order_received(client: str, client_type: str): None
+        +on_order_approved(client: str, client_type: str): None
+        +on_order_sent(client: str): None
+        +on_order_delivered(client: str, client_type: str, total: float): None
+    }
+
+    interface INotifier {
+        +send_email(recipient: str, message: str): None
+        +send_sms(recipient: str, message: str): None
+        +notify_account_manager(client: str): None
+    }
+
+    interface IInventoryProvider {
+        +product_exists(product_name: str): bool
+        +has_stock(product_name: str, quantity: int): bool
+    }
+}
+
+' ===== REPOSITORIES =====
+package "repositories" #FFF4E8 {
+    class SqliteOrderRepository {
+        -_connection: Connection
+        -_cursor: Cursor
+        +add(order: Order): int
+        +get_by_id(id: int): Optional[Order]
+        +update_status(id: int, status: str): None
+        +list_all(): list[Order]
+        +list_distinct_clients(): list[tuple]
+        +sum_total_by_client(client: str): float
+        +close(): None
+    }
+}
+
+' ===== SERVICES =====
+package "services" #FFF8E8 {
+    class OrderService {
+        -_repository: IOrderRepository
+        -_notifications: NotificationService
+        -_item_calculator: IItemPriceCalculator
+        -_client_discounts: dict[str, IClientDiscountStrategy]
+        +create_order(client, items, client_type): int
+        +update_status(order_id, new_status): None
+        +cancel_order(order_id): None
+        +get_order(order_id): Optional[Order]
+        +total_for_client(client): float
+    }
+
+    class PaymentService {
+        -_repository: IOrderRepository
+        -_notifications: NotificationService
+        -_strategies: dict[str, IPaymentStrategy]
+        +process_payment(order_id, method, value): bool
+    }
+
+    class NotificationService {
+        -_observers: list[IOrderEventObserver]
+        +subscribe(observer: IOrderEventObserver): None
+        +notify_order_received(client, client_type): None
+        +notify_order_approved(client, client_type): None
+        +notify_order_sent(client): None
+        +notify_order_delivered(client, client_type, total): None
+    }
+
+    class InventoryService {
+        -_provider: IInventoryProvider
+        +validate(items: list[dict]): bool
+    }
+
+    class ReportService {
+        -_repository: IOrderRepository
+        +sales_report(): None
+        +clients_report(): None
+    }
+
+    class ConsoleNotifier {
+        +send_email(recipient, message): None
+        +send_sms(recipient, message): None
+        +notify_account_manager(client): None
+    }
+
+    class StaticInventoryProvider {
+        -_STOCK: dict
+        +product_exists(product_name): bool
+        +has_stock(product_name, quantity): bool
+    }
+}
+
+' ===== STRATEGIES =====
+package "strategies" #F8E8F8 {
+    class CartaoStrategy {
+        +process(): bool
+    }
+    class PixStrategy {
+        +process(): bool
+    }
+    class BoletoStrategy {
+        +auto_approves: bool
+        +process(): bool
+    }
+    class CryptoPaymentStrategy {
+        +required_amount(order_total): float
+        +process(): bool
+    }
+
+    class DefaultItemPriceCalculator {
+        +calculate(item: dict): float
+    }
+    class VolumeDiscountCalculator {
+        -_base: IItemPriceCalculator
+        +calculate(item: dict): float
+    }
+
+    class VipClientDiscount {
+        +apply(total: float): float
+    }
+    class CorporativoClientDiscount {
+        +apply(total: float): float
+    }
+    class NoClientDiscount {
+        +apply(total: float): float
+    }
+}
+
+' ===== OBSERVERS =====
+package "observers" #E8F8F8 {
+    class EmailOrderObserver {
+        -_notifier: INotifier
+        +on_order_received(client, client_type): None
+        +on_order_approved(client, client_type): None
+        +on_order_sent(client): None
+        +on_order_delivered(client, client_type, total): None
+    }
+    class SmsOrderObserver {
+        -_notifier: INotifier
+        +on_order_received(client, client_type): None
+        +on_order_approved(client, client_type): None
+        +on_order_sent(client): None
+        +on_order_delivered(client, client_type, total): None
+    }
+    class AccountManagerOrderObserver {
+        -_notifier: INotifier
+        +on_order_received(client, client_type): None
+        +on_order_approved(client, client_type): None
+        +on_order_sent(client): None
+        +on_order_delivered(client, client_type, total): None
+    }
+    class PointsOrderObserver {
+        +on_order_received(client, client_type): None
+        +on_order_approved(client, client_type): None
+        +on_order_sent(client): None
+        +on_order_delivered(client, client_type, total): None
+    }
+    class WhatsAppOrderObserver {
+        -_recipient: str
+        +on_order_received(client, client_type): None
+        +on_order_approved(client, client_type): None
+        +on_order_sent(client): None
+        +on_order_delivered(client, client_type, total): None
+    }
+}
+
+' ===== FACTORIES =====
+package "factories" #F8F8E8 {
+    class StandardOrderFactory {
+        -_order_service: OrderService
+        +create(client, items, client_type): int
+    }
+    class SpecialOrderFactory {
+        -_repository: IOrderRepository
+        +create(client, items, client_type): int
+    }
+}
+
+' ===== FACADES =====
+package "facades" #F0F0F0 {
+    class Sis {
+        +add_ped(n, its, t): int
+        +get_ped(id): Optional[dict]
+        +upd_st(id, s): None
+        +calc_tot_cli(n): float
+        +gerar_rel(tipo): None
+        +proc_pag(id, m, vl): bool
+        +validar_estoque(its): bool
+        +cancelar_pedido(id): None
+        +close(): None
+    }
+    class PedEspecial {
+        +add_ped(n, its, t): int
+        +get_ped(id): Optional[dict]
+        +upd_st(id, s): None
+        +close(): None
+    }
+}
+
+' ===== RELATIONSHIPS =====
+
+' --- Implementations (..|>) ---
+SqliteOrderRepository ..|> IOrderRepository
+ConsoleNotifier       ..|> INotifier
+StaticInventoryProvider ..|> IInventoryProvider
+
+CartaoStrategy        ..|> IPaymentStrategy
+PixStrategy           ..|> IPaymentStrategy
+BoletoStrategy        ..|> IPaymentStrategy
+CryptoPaymentStrategy ..|> IPaymentStrategy
+
+DefaultItemPriceCalculator ..|> IItemPriceCalculator
+VolumeDiscountCalculator   ..|> IItemPriceCalculator
+VipClientDiscount          ..|> IClientDiscountStrategy
+CorporativoClientDiscount  ..|> IClientDiscountStrategy
+NoClientDiscount           ..|> IClientDiscountStrategy
+
+EmailOrderObserver          ..|> IOrderEventObserver
+SmsOrderObserver            ..|> IOrderEventObserver
+AccountManagerOrderObserver ..|> IOrderEventObserver
+PointsOrderObserver         ..|> IOrderEventObserver
+WhatsAppOrderObserver       ..|> IOrderEventObserver
+
+StandardOrderFactory ..|> IOrderFactory
+SpecialOrderFactory  ..|> IOrderFactory
+
+' --- Dependencies (DIP — serviços dependem de abstrações) ---
+OrderService --> IOrderRepository       : uses
+OrderService --> IItemPriceCalculator   : uses
+OrderService --> IClientDiscountStrategy : uses
+OrderService --> NotificationService    : notifies
+
+PaymentService --> IOrderRepository  : uses
+PaymentService --> IPaymentStrategy  : delegates
+PaymentService --> NotificationService : notifies
+
+ReportService    --> IOrderRepository   : reads
+InventoryService --> IInventoryProvider : uses
+NotificationService --> IOrderEventObserver : publishes
+
+StandardOrderFactory --> OrderService       : creates via
+SpecialOrderFactory  --> IOrderRepository   : persists via
+
+EmailOrderObserver          --> INotifier : sends
+SmsOrderObserver            --> INotifier : sends
+AccountManagerOrderObserver --> INotifier : sends
+
+' --- Decorator ---
+VolumeDiscountCalculator --> IItemPriceCalculator : decorates
+
+' --- Model usage ---
+IOrderRepository --> Order : manages
+OrderService     --> Order : creates
+
+' --- Facade wiring ---
+Sis --> SqliteOrderRepository
+Sis --> OrderService
+Sis --> StandardOrderFactory
+Sis --> PaymentService
+Sis --> InventoryService
+Sis --> ReportService
+Sis --> ConsoleNotifier
+Sis --> NotificationService
+
+PedEspecial --> SqliteOrderRepository
+PedEspecial --> SpecialOrderFactory
+
+@enduml
