@@ -1,0 +1,38 @@
+@startuml strategy
+skinparam classAttributeIconSize 0
+skinparam classFontStyle bold
+skinparam linetype ortho
+hide empty members
+
+interface IPaymentStrategy {
+    +required_amount(order_total: float): float
+    +process(): bool
+    +auto_approves: bool
+}
+
+class CartaoStrategy {
+    +process(): bool
+}
+class PixStrategy {
+    +process(): bool
+}
+class BoletoStrategy {
+    +auto_approves: bool
+    +process(): bool
+}
+class CryptoPaymentStrategy {
+    +required_amount(order_total: float): float
+    +process(): bool
+}
+
+class PaymentService {
+    -_strategies: dict[str, IPaymentStrategy]
+    +process_payment(order_id, method, value): bool
+}
+
+CartaoStrategy       ..|> IPaymentStrategy
+PixStrategy          ..|> IPaymentStrategy
+BoletoStrategy       ..|> IPaymentStrategy
+CryptoPaymentStrategy ..|> IPaymentStrategy
+PaymentService       --> IPaymentStrategy : delegates
+@enduml

@@ -1,0 +1,33 @@
+@startuml factory
+skinparam classAttributeIconSize 0
+skinparam classFontStyle bold
+skinparam linetype ortho
+hide empty members
+
+interface IOrderFactory {
+    +create(client: str, items: list, client_type: str): int
+}
+
+class StandardOrderFactory {
+    -_order_service: OrderService
+    +create(client, items, client_type): int
+}
+
+class SpecialOrderFactory {
+    -_repository: IOrderRepository
+    +create(client, items, client_type): int
+}
+
+class OrderService {
+    +create_order(client, items, client_type): int
+}
+
+interface IOrderRepository {
+    +add(order: Order): int
+}
+
+StandardOrderFactory ..|> IOrderFactory
+SpecialOrderFactory  ..|> IOrderFactory
+StandardOrderFactory --> OrderService     : creates via
+SpecialOrderFactory  --> IOrderRepository : persists via
+@enduml

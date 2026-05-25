@@ -1,0 +1,36 @@
+@startuml repository
+skinparam classAttributeIconSize 0
+skinparam classFontStyle bold
+skinparam linetype ortho
+hide empty members
+
+interface IOrderRepository {
+    +add(order: Order): int
+    +get_by_id(id: int): Optional[Order]
+    +update_status(id: int, status: str): None
+    +list_all(): list[Order]
+    +close(): None
+}
+
+class SqliteOrderRepository {
+    -_connection: Connection
+    -_cursor: Cursor
+    +add(order: Order): int
+    +get_by_id(id: int): Optional[Order]
+    +update_status(id: int, status: str): None
+    +list_all(): list[Order]
+    +close(): None
+}
+
+class OrderService {
+    +create_order(client, items, client_type): int
+}
+
+class PaymentService {
+    +process_payment(order_id, method, value): bool
+}
+
+SqliteOrderRepository ..|> IOrderRepository
+OrderService          --> IOrderRepository : uses
+PaymentService        --> IOrderRepository : uses
+@enduml

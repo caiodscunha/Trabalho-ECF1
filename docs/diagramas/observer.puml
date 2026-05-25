@@ -1,0 +1,45 @@
+@startuml observer
+skinparam classAttributeIconSize 0
+skinparam classFontStyle bold
+skinparam linetype ortho
+hide empty members
+
+interface IOrderEventObserver {
+    +on_order_received(client, client_type): None
+    +on_order_approved(client, client_type): None
+    +on_order_sent(client): None
+    +on_order_delivered(client, client_type, total): None
+}
+
+class NotificationService {
+    -_observers: list[IOrderEventObserver]
+    +subscribe(observer): None
+    +notify_order_received(client, client_type): None
+    +notify_order_approved(client, client_type): None
+    +notify_order_sent(client): None
+    +notify_order_delivered(client, client_type, total): None
+}
+
+class EmailOrderObserver {
+    +on_order_received(client, client_type): None
+    +on_order_approved(client, client_type): None
+    +on_order_sent(client): None
+    +on_order_delivered(client, client_type, total): None
+}
+class SmsOrderObserver {
+    +on_order_received(client, client_type): None
+}
+class PointsOrderObserver {
+    +on_order_delivered(client, client_type, total): None
+}
+class WhatsAppOrderObserver {
+    -_recipient: str
+    +on_order_received(client, client_type): None
+}
+
+NotificationService      --> IOrderEventObserver : publishes
+EmailOrderObserver       ..|> IOrderEventObserver
+SmsOrderObserver         ..|> IOrderEventObserver
+PointsOrderObserver      ..|> IOrderEventObserver
+WhatsAppOrderObserver    ..|> IOrderEventObserver
+@enduml

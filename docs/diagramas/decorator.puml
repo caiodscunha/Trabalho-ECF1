@@ -1,0 +1,29 @@
+@startuml decorator
+skinparam classAttributeIconSize 0
+skinparam classFontStyle bold
+skinparam linetype ortho
+hide empty members
+
+interface IItemPriceCalculator {
+    +calculate(item: dict): float
+}
+
+class DefaultItemPriceCalculator {
+    +calculate(item: dict): float
+}
+
+class VolumeDiscountCalculator {
+    -_base: IItemPriceCalculator
+    +calculate(item: dict): float
+}
+
+class OrderService {
+    -_item_calculator: IItemPriceCalculator
+    +create_order(client, items, client_type): int
+}
+
+DefaultItemPriceCalculator ..|> IItemPriceCalculator
+VolumeDiscountCalculator   ..|> IItemPriceCalculator
+VolumeDiscountCalculator   --> IItemPriceCalculator : decorates
+OrderService               --> IItemPriceCalculator : uses
+@enduml
