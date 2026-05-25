@@ -14,8 +14,8 @@ class DefaultItemPriceCalculator(IItemPriceCalculator):
     """Calcula subtotal aplicando o fator de desconto por tipo de item."""
 
     def calculate(self, item: dict[str, Any]) -> float:
-        base = item["p"] * item["q"]
-        return base * _ITEM_FACTORS.get(item["tipo"], 0.0)
+        base: float = float(item["p"]) * float(item["q"])
+        return base * _ITEM_FACTORS.get(str(item["tipo"]), 0.0)
 
 
 class VipClientDiscount(IClientDiscountStrategy):

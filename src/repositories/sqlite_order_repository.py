@@ -1,6 +1,6 @@
 import json
 import sqlite3
-from typing import Optional
+from typing import Any, Optional
 
 from src.interfaces.order_repository import IOrderRepository
 from src.models.order import Order
@@ -63,13 +63,13 @@ class SqliteOrderRepository(IOrderRepository):
 
     def sum_total_by_client(self, client: str) -> float:
         self._cursor.execute("SELECT * FROM ped WHERE cli=?", (client,))
-        return sum(r[3] for r in self._cursor.fetchall())
+        return sum(float(r[3]) for r in self._cursor.fetchall())
 
     def close(self) -> None:
         self._connection.close()
 
     @staticmethod
-    def _row_to_order(row: tuple) -> Order:
+    def _row_to_order(row: tuple[Any, ...]) -> Order:
         return Order(
             id=row[0],
             cliente=row[1],

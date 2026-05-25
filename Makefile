@@ -13,7 +13,7 @@ lint:
 	ruff check src/ tests/
 
 type:
-	mypy --strict src/ || true
+	mypy --strict src/
 
 complexity:
 	radon cc src/ -s -a
